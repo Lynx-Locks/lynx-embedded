@@ -1,1 +1,1 @@
-# embedded
+# Lynx Embedded
