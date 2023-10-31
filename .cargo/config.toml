@@ -3,8 +3,8 @@ target = "riscv32imc-esp-espidf"
 
 [target.riscv32imc-esp-espidf]
 linker = "ldproxy"
-# runner = "espflash --monitor" # Select this runner for espflash v1.x.x
-runner = "espflash flash --monitor" # Select this runner for espflash v2.x.x
+# This baud rate increases the flash speed, but may cause issues
+runner = "espflash flash --monitor --baud=460800" # Select this runner for espflash v2.x.x
 rustflags = ["--cfg", "espidf_time64", "-C", "default-linker-libraries"]
 
 [unstable]
