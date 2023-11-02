@@ -9,7 +9,7 @@ use esp_idf_svc::log::EspLogger;
 use esp_idf_svc::wifi::{BlockingWifi, EspWifi};
 use esp_idf_svc::{eventloop::EspSystemEventLoop, nvs::EspDefaultNvsPartition};
 
-use lynx_embedded::{connect_wifi, reqwesp};
+use lynx_embedded::{reqwesp, wifi as espWifi};
 
 #[allow(dead_code)]
 #[derive(Deserialize, Debug)]
@@ -41,7 +41,7 @@ fn main() -> Result<()> {
         sys_loop,
     )?;
 
-    connect_wifi(&mut wifi)?;
+    espWifi::connect(&mut wifi)?;
 
     let mut client = reqwesp::Client::new()?;
     // Endpoint for testing REST requests

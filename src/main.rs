@@ -1,11 +1,11 @@
 use anyhow::Result;
 
-use lynx_embedded::connect_wifi;
-
 use esp_idf_svc::hal::prelude::Peripherals;
 use esp_idf_svc::log::EspLogger;
 use esp_idf_svc::wifi::{BlockingWifi, EspWifi};
 use esp_idf_svc::{eventloop::EspSystemEventLoop, nvs::EspDefaultNvsPartition};
+
+use lynx_embedded::wifi as espWifi;
 
 fn main() -> Result<()> {
     // Bind the log crate to the ESP Logging facilities
@@ -21,7 +21,7 @@ fn main() -> Result<()> {
         sys_loop,
     )?;
 
-    connect_wifi(&mut wifi)?;
+    espWifi::connect(&mut wifi)?;
     log::info!("Wifi connected!");
 
     Ok(())

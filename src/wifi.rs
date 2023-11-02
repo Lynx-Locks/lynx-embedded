@@ -4,14 +4,14 @@ use embedded_svc::wifi::{AuthMethod, ClientConfiguration, Configuration};
 use esp_idf_svc::wifi::{BlockingWifi, EspWifi};
 
 #[toml_cfg::toml_config]
-pub struct Config {
+pub(crate) struct Config {
     #[default("")]
     wifi_ssid: &'static str,
     #[default("")]
     wifi_password: &'static str,
 }
 
-pub fn connect_wifi(wifi: &mut BlockingWifi<EspWifi<'static>>) -> Result<()> {
+pub fn connect(wifi: &mut BlockingWifi<EspWifi<'static>>) -> Result<()> {
     let wifi_configuration: Configuration = Configuration::Client(ClientConfiguration {
         ssid: CONFIG.wifi_ssid.into(),
         password: CONFIG.wifi_password.into(),
