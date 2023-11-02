@@ -1,11 +1,10 @@
 use anyhow::Result;
-use hyper::HeaderMap;
 
 use embedded_svc::http::client::Client as HttpClient;
 use embedded_svc::http::Method;
 use esp_idf_svc::http::client::{Configuration as HttpConfig, EspHttpConnection};
 
-use crate::{Request, RequestBuilder};
+use crate::{Request, RequestBuilder, Response};
 
 pub struct Client {
     client: HttpClient<EspHttpConnection>,
@@ -21,16 +20,7 @@ impl<'a> Client {
 
     /// Start building a `Request` with the `Method` and url.
     pub fn request(&'a mut self, method: Method, url: &'a str) -> RequestBuilder {
-        RequestBuilder {
-            client: &mut self.client,
-            headers: HeaderMap::new(),
-            request: Ok(Request {
-                method,
-                url,
-                headers: Box::new([]),
-                body: None,
-            }),
-        }
+        RequestBuilder::new(self, method, url)
     }
 
     /// Convenience method to make a `GET` request to a URL.
@@ -51,6 +41,17 @@ impl<'a> Client {
     /// Convenience method to make a `DELETE` request to a URL.
     pub fn delete(&'a mut self, url: &'a str) -> RequestBuilder {
         self.request(Method::Delete, url)
+    }
+
+    /// Execute a `Request`.
+    ///
+    /// A `Request` can be built manually with `Request::new()` or obtained
+    /// from a RequestBuilder with `RequestBuilder::build()`.
+    ///
+    /// You should prefer to use the `RequestBuilder` and
+    /// `RequestBuilder::send()`.
+    pub fn execute(&'a mut self, request: &'a Request) -> Result<Response> {
+        Response::new(&mut self.client, request)
     }
 
     /// Create a new `HttpClient` with a `EspHttpConnection` handler.

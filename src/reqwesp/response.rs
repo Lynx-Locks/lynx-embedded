@@ -23,11 +23,11 @@ impl<'a> Response<'a> {
         client: &'a mut HttpClient<EspHttpConnection>,
         request: &'a Request<'a>,
     ) -> Result<Self> {
-        let mut req = client.request(request.method, request.url, &request.headers)?;
+        let mut req = client.request(request.method, request.url, request.headers.as_slice())?;
 
         if let Some(data) = &request.body {
             log::debug!("Adding data to request: {} bytes", data.len());
-            req.write_all(data.as_slice())?;
+            req.write_all(data)?;
             req.flush()?;
         }
 

@@ -1,52 +1,122 @@
 use anyhow::{bail, Result};
+use hyper::body::Bytes;
 use hyper::header::{HeaderValue, CONTENT_LENGTH, CONTENT_TYPE};
 use hyper::http::HeaderName;
 use hyper::HeaderMap;
 use serde::Serialize;
 
-use embedded_svc::http::client::Client as HttpClient;
 use embedded_svc::http::Method;
-use esp_idf_svc::http::client::EspHttpConnection;
 
-use crate::Response;
+use crate::{Client, Response};
 
+#[derive(Clone)]
 pub struct Request<'a> {
     pub(crate) method: Method,
     pub(crate) url: &'a str,
-    pub(crate) headers: Box<[(&'a str, &'a str)]>,
-    pub(crate) body: Option<Vec<u8>>,
+    pub(crate) headers: Vec<(&'a str, &'a str)>,
+    pub(crate) body: Option<Bytes>,
+}
+
+impl<'a> Request<'a> {
+    pub fn new(method: Method, url: &'a str) -> Self {
+        Self {
+            method,
+            url,
+            headers: vec![],
+            body: None,
+        }
+    }
+
+    /// Get the method.
+    pub fn method(&self) -> &Method {
+        &self.method
+    }
+
+    /// Get a mutable reference to the method.
+    pub fn method_mut(&mut self) -> &mut Method {
+        &mut self.method
+    }
+
+    /// Get the url.
+    pub fn url(&self) -> &str {
+        self.url
+    }
+
+    /// Set a new url.
+    pub fn set_url(&mut self, url: &'a str) {
+        self.url = url
+    }
+
+    /// Get the headers.
+    pub fn headers(&self) -> &Vec<(&'a str, &'a str)> {
+        &self.headers
+    }
+
+    /// Get a mutable reference to the headers.
+    pub fn headers_mut(&mut self) -> &mut Vec<(&'a str, &'a str)> {
+        &mut self.headers
+    }
+
+    /// Get the body.
+    pub fn body(&self) -> Option<&Bytes> {
+        self.body.as_ref()
+    }
+
+    /// Get a mutable reference to the body.
+    pub fn body_mut(&mut self) -> &mut Option<Bytes> {
+        &mut self.body
+    }
 }
 
 pub struct RequestBuilder<'a> {
-    pub(crate) client: &'a mut HttpClient<EspHttpConnection>,
-    pub(crate) headers: HeaderMap,
-    pub(crate) request: Result<Request<'a>>,
+    client: &'a mut Client,
+    headers: HeaderMap,
+    request: Result<Request<'a>>,
 }
 
 impl<'a> RequestBuilder<'a> {
+    pub fn new(client: &'a mut Client, method: Method, url: &'a str) -> Self {
+        Self {
+            client,
+            headers: HeaderMap::new(),
+            request: Ok(Request::new(method, url)),
+        }
+    }
+
     /// Constructs the `Request` and sends it to the target URL, returning a `Response`.
-    pub fn send(&'a mut self) -> Result<Response<'a>> {
+    pub fn send(&'a mut self) -> Result<Response> {
         match &mut self.request {
             Ok(ref mut request) => {
-                // Convert from HeaderMap to a boxed slice used for the request
+                // Convert from HeaderMap to vec
                 request.headers = self
                     .headers
                     .iter()
                     .map(|(key, value)| (key.as_str(), value.to_str().unwrap()))
-                    .collect::<Vec<(&str, &str)>>()
-                    .into_boxed_slice();
+                    .collect();
 
-                Response::new(self.client, request)
+                self.client.execute(request)
             }
             Err(err) => bail!(err.to_string()),
         }
     }
 
-    // TODO implement build method for returning a constructed `Request`.
-    //  Must update `Request` headers with `RequestBuilder` headers before returning.
-    // pub fn build(self) -> Result<Request<'a>> {
-    //     self.request
-    // }
+    /// Build a `Request`, which can be inspected, modified and executed with
+    /// `Client::execute()`.
+    pub fn build(&'a mut self) -> Result<Request> {
+        match &mut self.request {
+            Ok(ref mut request) => {
+                // Convert from HeaderMap to vec
+                request.headers = self
+                    .headers
+                    .iter()
+                    .map(|(key, value)| (key.as_str(), value.to_str().unwrap()))
+                    .collect();
+
+                Ok(request.clone())
+            }
+            Err(err) => bail!(err.to_string()),
+        }
+    }
 
     /// Add a header to this request.
     pub fn header(mut self, key: HeaderName, value: HeaderValue) -> Self {
@@ -66,7 +136,7 @@ impl<'a> RequestBuilder<'a> {
     pub fn body(mut self, data: &[u8]) -> Self {
         let content_length_header = data.len().to_string();
         if let Ok(ref mut req) = self.request {
-            req.body = Some(data.to_vec());
+            req.body = Some(Bytes::copy_from_slice(data));
         }
         self.header(CONTENT_LENGTH, content_length_header.parse().unwrap())
     }
@@ -112,7 +182,7 @@ impl<'a> RequestBuilder<'a> {
                         self.headers
                             .insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
                     }
-                    req.body = Some(body);
+                    req.body = Some(Bytes::from(body));
                 }
                 Err(err) => error = Some(err),
             }
