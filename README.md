@@ -44,13 +44,13 @@ Run and monitor the program:
 Flash the program:
 
 ```bash
-./esp-cargo espflash flash --release --example http
+./esp-cargo espflash flash --release --example led
 ```
 
 Run and monitor the program:
 
 ```bash
-./esp-cargo run --example http
+./esp-cargo run --example led
 ```
 
 ## Usage: Local Environment
@@ -113,13 +113,13 @@ cargo run
 Flash the program:
 
 ```bash
-cargo espflash flash --release --example http
+cargo espflash flash --release --example led
 ```
 
 Run and monitor the program:
 
 ```bash
-cargo run --example http
+cargo run --example led
 ```
 
 ## Troubleshooting
