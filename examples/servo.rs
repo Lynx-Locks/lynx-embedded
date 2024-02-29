@@ -49,19 +49,23 @@ fn main() {
     let max_limit = max_duty * 125 / 1000;
     println!("Max Limit {}", max_limit);
 
-    // Change this to modify the angle the servo starts at.
-    // The servo will jump to this position when the program starts.
-    let angle_start = 0;
-    // Change this to modify the angle the servo sweeps
-    let angle_change = 120;
+    // The servo angle will alternate between these 3 states (in order).
+    // When the program starts, the servo will jump to `neutral_angle`
+    let neutral_angle = 90;
+    let unlocked_angle = 0;
+    let locked_angle = 180;
+
+    // Servo speed (lower number == higher speed)
+    let servo_delay = 12;
 
     // Define Starting Position
     driver
-        .set_duty(map(angle_start, 0, 180, min_limit, max_limit))
+        .set_duty(map(neutral_angle, 0, 180, min_limit, max_limit))
         .unwrap();
     // Give servo some time to update
 
-    let mut toggle = Toggle::CCW;
+    let mut toggle = Toggle::Neutral;
+    let mut cur_angle = neutral_angle;
 
     loop {
         FreeRtos::delay_ms(50);
@@ -70,9 +74,10 @@ fn main() {
 
         if button.is_low() {
             match toggle {
-                Toggle::CCW => {
-                    println!("Moving CCW");
-                    for mut angle in angle_start..(angle_start + angle_change) {
+                Toggle::Neutral => {
+                    println!("Moving to Neutral");
+
+                    for mut angle in angle_range(cur_angle, neutral_angle) {
                         // Print Current Angle for visual verification
                         println!("Current Angle {} Degrees", angle);
 
@@ -85,13 +90,15 @@ fn main() {
                             .set_duty(map(angle, 0, 180, min_limit, max_limit))
                             .unwrap();
                         // Give servo some time to update
-                        FreeRtos::delay_ms(12); // Increase this delay to slow rotation speed
-                        toggle = Toggle::CW;
+                        FreeRtos::delay_ms(servo_delay); // Increase this delay to slow rotation speed
                     }
+                    cur_angle = neutral_angle;
+                    toggle = Toggle::Unlocked;
                 }
-                Toggle::CW => {
-                    println!("Moving CW");
-                    for mut angle in (angle_start..(angle_start + angle_change)).rev() {
+                Toggle::Unlocked => {
+                    println!("Moving to Unlocked");
+
+                    for mut angle in angle_range(cur_angle, unlocked_angle) {
                         // Print Current Angle for visual verification
                         println!("Current Angle {} Degrees", angle);
 
@@ -104,9 +111,31 @@ fn main() {
                             .set_duty(map(angle, 0, 180, min_limit, max_limit))
                             .unwrap();
                         // Give servo some time to update
-                        FreeRtos::delay_ms(12);
-                        toggle = Toggle::CCW;
+                        FreeRtos::delay_ms(servo_delay);
                     }
+                    cur_angle = unlocked_angle;
+                    toggle = Toggle::Locked;
+                }
+                Toggle::Locked => {
+                    println!("Moving to Locked");
+
+                    for mut angle in angle_range(cur_angle, locked_angle) {
+                        // Print Current Angle for visual verification
+                        println!("Current Angle {} Degrees", angle);
+
+                        if angle > 180 {
+                            angle = 180;
+                        }
+
+                        // Set the desired duty cycle
+                        driver
+                            .set_duty(map(angle, 0, 180, min_limit, max_limit))
+                            .unwrap();
+                        // Give servo some time to update
+                        FreeRtos::delay_ms(servo_delay);
+                    }
+                    cur_angle = locked_angle;
+                    toggle = Toggle::Neutral;
                 }
             }
         }
@@ -114,11 +143,20 @@ fn main() {
 }
 
 enum Toggle {
-    CCW,
-    CW,
+    Neutral,
+    Unlocked,
+    Locked,
 }
 
 // Function that maps one range to another
 fn map(x: u32, in_min: u32, in_max: u32, out_min: u32, out_max: u32) -> u32 {
     (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min
+}
+
+fn angle_range(a: u32, b: u32) -> Box<dyn Iterator<Item = u32>> {
+    if b > a {
+        Box::new(a..=b)
+    } else {
+        Box::new((b..=a).rev())
+    }
 }
