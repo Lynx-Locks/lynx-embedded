@@ -93,19 +93,26 @@ impl<I: Interface, T: CountDown, const N: usize> Pn532<I, T, N> {
         &mut self,
         request: &Request<M>,
         response_len: usize,
-        timeout: T::Time,
+        ack_timeout: T::Time,
+        response_timeout: T::Time,
     ) -> Result<&[u8], Error<I::Error>> {
         // codegen trampoline: https://github.com/rust-lang/rust/issues/77960
-        self._process(request.borrow(), response_len, timeout)
+        self._process(
+            request.borrow(),
+            response_len,
+            ack_timeout,
+            response_timeout,
+        )
     }
-    fn _process(
+    pub fn _process(
         &mut self,
         request: BorrowedRequest<'_>,
         response_len: usize,
-        timeout: T::Time,
+        ack_timeout: T::Time,
+        response_timeout: T::Time,
     ) -> Result<&[u8], Error<I::Error>> {
         let sent_command = request.command;
-        self.timer.start(timeout);
+        self.timer.start(ack_timeout);
         self._send(request)?;
         while self.interface.wait_ready()?.is_pending() {
             if self.timer.wait().is_ok() {
@@ -113,6 +120,8 @@ impl<I: Interface, T: CountDown, const N: usize> Pn532<I, T, N> {
             }
         }
         self.receive_ack()?;
+
+        self.timer.start(response_timeout);
         while self.interface.wait_ready()?.is_pending() {
             if self.timer.wait().is_ok() {
                 return Err(Error::TimeoutResponse);
