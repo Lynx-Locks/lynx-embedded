@@ -60,6 +60,6 @@ opt-level = 3
 opt-level = 3
 
 [[package.metadata.esp-idf-sys.extra_components]]
-bindings_module = "ykhmac"  # Accessibly from esp_idf_svc::sys::ykhmac
 component_dirs = "components"
-bindings_header = "components/ykhmac/include/ykhmac.h"
+#bindings_module = "ykhmac"  # Accessibly from esp_idf_svc::sys::ykhmac
+#bindings_header = "components/ykhmac/include/ykhmac.h"

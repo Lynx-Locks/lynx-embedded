@@ -11,9 +11,10 @@ use esp_idf_svc::sys::EspError;
 
 use crate::{Pn532, Pn532Error};
 
-use esp_idf_svc::sys::ykhmac::{
-    ykhmac_authenticate, ykhmac_enroll_key, ykhmac_select, EEPROM_SIZE, SECRET_KEY_SIZE, SLOT_2,
-};
+mod bindings {
+    include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
+}
+use bindings::*;
 
 /// PN532 response buffer size. Must be big enough to hold any expected responses.
 const PN532_BUF_SIZE: usize = 128;
