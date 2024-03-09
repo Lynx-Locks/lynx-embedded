@@ -31,8 +31,17 @@ static INIT_PN532: Once = Once::new();
 
 static mut FLASH: Option<FlashStorage> = None;
 
+/// # Safety
+///
+/// Undefined behavior may occur when `message` is passed to `std::ffi::CStr::from_ptr`.
+///
+/// - The memory pointed to by `message` must contain a valid nul terminator at the end of the string.
+/// - `message` must be valid for reads of bytes up to and including the nul terminator. This means in particular:
+///   - The entire memory range of this `CStr` must be contained within a single allocated object!
+///   - `message` must be non-null even for a zero-length cstr.
+//  - The nul terminator must be within isize::MAX from `message`.
 #[no_mangle]
-pub extern "C" fn ykhmac_debug_print(message: *const ::core::ffi::c_char) {
+pub unsafe extern "C" fn ykhmac_debug_print(message: *const ::core::ffi::c_char) {
     // Convert the raw pointer to a CStr
     let c_str: &std::ffi::CStr = unsafe { std::ffi::CStr::from_ptr(message) };
     // Convert the CStr to a &str
@@ -45,8 +54,15 @@ pub extern "C" fn ykhmac_random() -> u8 {
     random::<u8>()
 }
 
+/// # Safety
+///
+/// This function dereferences the raw pointer to `send_buffer`, `response_buffer`,
+/// and `response_length` after confirming they are not `null`.
+///
+/// The same precautions as `std::slice::from_raw_parts_mut` should be taken to avoid
+/// undefined behavior for `send_buffer` and `response_buffer`.
 #[no_mangle]
-pub extern "C" fn ykhmac_data_exchange(
+pub unsafe extern "C" fn ykhmac_data_exchange(
     send_buffer: *mut u8,
     send_length: u8,
     response_buffer: *mut u8,
@@ -80,8 +96,16 @@ pub extern "C" fn ykhmac_data_exchange(
     true
 }
 
+/// # Safety
+///
+/// This function dereferences the raw pointer to `data` after confirming it is not `null`.
+/// The same precautions as `std::slice::from_raw_parts` should be taken to avoid undefined behavior.
 #[no_mangle]
-pub extern "C" fn ykhmac_presistent_write(data: *const u8, size: usize, offset: usize) -> bool {
+pub unsafe extern "C" fn ykhmac_presistent_write(
+    data: *const u8,
+    size: usize,
+    offset: usize,
+) -> bool {
     if data.is_null() || size == 0 {
         log::error!("Persistent write data is null or size is 0");
         return false;
@@ -115,8 +139,12 @@ pub extern "C" fn ykhmac_presistent_write(data: *const u8, size: usize, offset: 
     true
 }
 
+/// # Safety
+///
+/// This function dereferences the raw pointer to `data` after confirming it is not `null`.
+/// The same precautions as `std::slice::from_raw_parts_mut` should be taken to avoid undefined behavior.
 #[no_mangle]
-pub extern "C" fn ykhmac_presistent_read(data: *mut u8, size: usize, offset: usize) -> bool {
+pub unsafe extern "C" fn ykhmac_presistent_read(data: *mut u8, size: usize, offset: usize) -> bool {
     if data.is_null() || size == 0 {
         log::error!("Persistent read buffer is null or size is 0");
         return false;
