@@ -4,7 +4,7 @@ version = "0.1.0"
 authors = ["Cameron Kinsella <ckinsella@uwaterloo.ca>"]
 edition = "2021"
 resolver = "2"
-rust-version = "1.71"
+rust-version = "1.76"
 
 [profile.release]
 opt-level = "s"
@@ -48,3 +48,14 @@ anyhow = "1"
 
 [package.metadata.espflash]
 partition_table = "partitions.csv" # Supports CSV and binary formats
+
+[profile.dev.package.esp-storage]
+opt-level = 3
+
+[profile.release.package.esp-storage]
+opt-level = 3
+
+[[package.metadata.esp-idf-sys.extra_components]]
+bindings_module = "ykhmac"  # Accessibly from esp_idf_svc::sys::ykhmac
+component_dirs = "components"
+bindings_header = "components/ykhmac/include/ykhmac.h"
