@@ -7,7 +7,7 @@ pub struct Request<const N: usize> {
     pub data: [u8; N],
 }
 
-pub(crate) struct BorrowedRequest<'a> {
+pub struct BorrowedRequest<'a> {
     pub command: Command,
     pub data: &'a [u8],
 }
@@ -18,6 +18,13 @@ impl<const N: usize> Request<N> {
             command: self.command,
             data: &self.data,
         }
+    }
+}
+
+impl<'a> BorrowedRequest<'a> {
+    #[inline]
+    pub const fn new(command: Command, data: &'a [u8]) -> Self {
+        BorrowedRequest { command, data }
     }
 }
 
