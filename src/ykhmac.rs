@@ -24,13 +24,15 @@ const FLASH_ADDR: u32 = 0x9000;
 
 const YUBIKEY_AID: [u8; 7] = [0xA0, 0x00, 0x00, 0x05, 0x27, 0x20, 0x01];
 
+static mut FLASH: Option<FlashStorage> = None;
+
 static mut PN532: Option<Pn532<SpiDriver, PN532_BUF_SIZE>> = None;
 
 static INIT_FLASH: Once = Once::new();
 static INIT_PN532: Once = Once::new();
 
-static mut FLASH: Option<FlashStorage> = None;
-
+/// Prints debug messages from C code.
+///
 /// # Safety
 ///
 /// Undefined behavior may occur when `message` is passed to `std::ffi::CStr::from_ptr`.
@@ -49,11 +51,16 @@ pub unsafe extern "C" fn ykhmac_debug_print(message: *const ::core::ffi::c_char)
     print!("{}", str_slice)
 }
 
+/// Returns a random `u8`.
 #[no_mangle]
 pub extern "C" fn ykhmac_random() -> u8 {
     random::<u8>()
 }
 
+/// Performs the `InDataExchange` command with the PN532. `send_buffer` is sent and
+/// `response_length` bytes of the response will be loaded into `response_buffer`.
+/// If the actual response is shorter than `response_length`, the value of `response_length` will be updated.
+///
 /// # Safety
 ///
 /// This function dereferences the raw pointer to `send_buffer`, `response_buffer`,
@@ -96,6 +103,8 @@ pub unsafe extern "C" fn ykhmac_data_exchange(
     true
 }
 
+/// Writes data from the `data` buffer into persistent memory.
+///
 /// # Safety
 ///
 /// This function dereferences the raw pointer to `data` after confirming it is not `null`.
@@ -139,6 +148,8 @@ pub unsafe extern "C" fn ykhmac_presistent_write(
     true
 }
 
+/// Reads data from persistent memory into the `data` buffer.
+///
 /// # Safety
 ///
 /// This function dereferences the raw pointer to `data` after confirming it is not `null`.
@@ -166,6 +177,8 @@ pub unsafe extern "C" fn ykhmac_presistent_read(data: *mut u8, size: usize, offs
     true
 }
 
+/// Obtains a mutable reference to the shared FlashStorage instance.
+/// Initializes the shared FlashStorage instance on first call.
 fn get_flash() -> &'static mut FlashStorage {
     // Use the `Once` pattern to ensure the FlashStorage is initialized only once
     INIT_FLASH.call_once(|| unsafe {
@@ -183,6 +196,7 @@ fn get_flash() -> &'static mut FlashStorage {
     }
 }
 
+/// Initializes the shared PN532 instance.
 pub fn initialize_pn532(
     mut pn532: Pn532<'static, SpiDriver<'static>, PN532_BUF_SIZE>,
 ) -> anyhow::Result<(), Pn532Error> {
@@ -214,6 +228,7 @@ pub fn initialize_pn532(
     Ok(())
 }
 
+/// Obtains a mutable reference to the shared PN532 instance.
 pub fn get_pn532<'d>(
 ) -> anyhow::Result<&'static mut Pn532<'d, SpiDriver<'d>, PN532_BUF_SIZE>, Pn532Error> {
     unsafe {
@@ -229,6 +244,7 @@ pub fn get_pn532<'d>(
     }
 }
 
+/// Enrolls a secret key into encrypted persistent memory.
 pub fn enroll_key(hex_str: &str) -> anyhow::Result<()> {
     let mut secret_key = [0u8; SECRET_KEY_SIZE as usize];
     if let Err(e) = input_secret_key(hex_str, &mut secret_key) {
@@ -245,6 +261,7 @@ pub fn enroll_key(hex_str: &str) -> anyhow::Result<()> {
     }
 }
 
+/// Converts each chunk of 2 in the given hex string into a `u8` and fills them into `buf`.
 fn input_secret_key(
     hex_str: &str,
     buf: &mut [u8; SECRET_KEY_SIZE as usize],
@@ -253,10 +270,10 @@ fn input_secret_key(
         return Err(IntErrorKind::InvalidDigit);
     }
 
-    buf.fill(0);
+    buf.fill(0); // Pad with zeros if secret key is shorter than `SECRET_KEY_SIZE`.
     let mut hex = hex_str
         .as_bytes()
-        .chunks(2)
+        .chunks(2) // Each 2 hex chars are treated as 1 `u8` (e.g. "FF" -> 0xFF)
         .map(|chunk| {
             let substr: String = chunk.iter().map(|&c| c as char).collect();
             u8::from_str_radix(&substr, 16).expect("Invalid hex character in secret key")
@@ -274,10 +291,13 @@ fn input_secret_key(
     Ok(())
 }
 
+/// Returns `true` if each character in the string is a hexadecimal digit.
 fn is_hex_string(input: &str) -> bool {
     input.chars().all(|c| c.is_ascii_hexdigit())
 }
 
+/// Waits for a YubiKey and then performs challenge-response.
+/// Returns `true` on successful authentication.
 pub fn authenticate() -> bool {
     let pn532 = match get_pn532() {
         Ok(device) => device,

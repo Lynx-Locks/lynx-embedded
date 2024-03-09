@@ -213,6 +213,7 @@ impl<'d, S: Borrow<SpiDriver<'d>> + 'd, const N: usize> Pn532<'d, S, N> {
     }
 }
 
+/// Wrapper struct to allow ESP32 Timers to interface with PN532 crate.
 struct TimerWrapper<'d> {
     driver: TimerDriver<'d>,
     duration: Duration,
@@ -249,6 +250,7 @@ impl<'d> CountDown for TimerWrapper<'d> {
     }
 }
 
+/// Wrapper struct to allow ESP32 SPI to interface with PN532 crate.
 struct SpiWrapper<'d, T>
 where
     T: Borrow<SpiDriver<'d>> + 'd,
