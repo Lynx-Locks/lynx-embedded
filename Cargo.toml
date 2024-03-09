@@ -45,6 +45,7 @@ void = "1.0.2"
 [build-dependencies]
 embuild = "0.31.4"
 anyhow = "1"
+bindgen = "0.69.4"
 
 [package.metadata.espflash]
 partition_table = "partitions.csv" # Supports CSV and binary formats

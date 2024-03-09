@@ -1,3 +1,5 @@
+// Uncomment the line below if generating bindings in build.rs instead of through esp-idf
+// include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 pub mod wifi;
 
 pub mod reqwesp;
