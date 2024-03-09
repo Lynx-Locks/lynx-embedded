@@ -10,3 +10,5 @@ pub use led_strip::Led;
 
 mod pn532;
 pub use pn532::{Pn532, Pn532Error};
+
+pub mod ykhmac;
