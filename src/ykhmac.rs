@@ -296,30 +296,97 @@ fn is_hex_string(input: &str) -> bool {
     input.chars().all(|c| c.is_ascii_hexdigit())
 }
 
-/// Waits for a YubiKey and then performs challenge-response.
-/// Returns `true` on successful authentication.
-pub fn authenticate() -> bool {
+pub enum YubiKeyResult {
+    IsYubiKey,
+    NotYubiKey,
+    Error(Pn532Error),
+}
+
+/// Waits for an NFC target and returns Ok(true) if the target is a YubiKey.
+pub fn wait_for_yubikey() -> YubiKeyResult {
     let pn532 = match get_pn532() {
         Ok(device) => device,
         Err(e) => {
             log::error!("Cannot get PN532: {e:?}");
-            return false;
+            return YubiKeyResult::Error(Pn532Error::InterfaceError(EspError::from_non_zero(
+                NonZeroI32::try_from(0x103).expect("Unable to convert EspError code"),
+            )));
         }
     };
 
-    if pn532.inlist_passive_target().is_ok() {
-        unsafe {
+    match pn532.inlist_passive_target() {
+        Ok(_) => unsafe {
             if ykhmac_select(YUBIKEY_AID.as_ptr(), 7) {
                 log::info!("Select OK");
-                return if ykhmac_authenticate(SLOT_2 as u8) {
-                    log::info!("Access granted :)");
-                    true
-                } else {
-                    log::info!("Communication error or access denied :(");
-                    false
-                };
+                YubiKeyResult::IsYubiKey
+            } else {
+                YubiKeyResult::NotYubiKey // Not a YubiKey
             }
+        },
+        Err(e) => YubiKeyResult::Error(e),
+    }
+}
+
+pub enum AuthStatus {
+    /// Succeeded challenge-response exchange.
+    AccessGranted,
+    /// Failed challenge-response exchange.
+    AccessDenied,
+    /// PN532 communication or hardware error.
+    Error(Pn532Error),
+}
+
+/// Waits for a YubiKey and then performs challenge-response.
+pub fn authenticate() -> AuthStatus {
+    unsafe {
+        if ykhmac_authenticate(SLOT_2 as u8) {
+            log::info!("Access granted :)");
+            AuthStatus::AccessGranted
+        } else {
+            log::info!("Communication error or access denied :(");
+            AuthStatus::AccessDenied
         }
     }
-    false
+}
+
+/// Returns a detected YubiKey's serial number.
+pub fn get_serial() -> u32 {
+    let mut serial: u32 = 0;
+    let serial_reference: &mut u32 = &mut serial;
+    let serial_pointer: *mut u32 = serial_reference as *mut u32;
+    unsafe {
+        ykhmac_read_serial(serial_pointer);
+        serial_pointer.read()
+    }
+}
+
+pub struct Version {
+    pub major: u8,
+    pub minor: u8,
+    pub patch: u8,
+}
+
+impl Version {
+    pub fn as_string(&self) -> String {
+        format!("{}.{}.{}", self.major, self.minor, self.patch)
+    }
+}
+
+impl std::fmt::Display for Version {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
+        write!(f, "{}", self.as_string())
+    }
+}
+
+/// Returns a detected YubiKey's firmware version.
+pub fn get_version() -> Version {
+    let mut version = [0u8; 3];
+    unsafe {
+        ykhmac_read_version(version.as_mut_ptr());
+    }
+    Version {
+        major: version[0],
+        minor: version[1],
+        patch: version[2],
+    }
 }

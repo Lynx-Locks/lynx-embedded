@@ -10,8 +10,9 @@ use esp_idf_svc::hal::timer::{TimerConfig, TimerDriver};
 use esp_idf_svc::log::EspLogger;
 use esp_idf_svc::nvs::EspDefaultNvsPartition;
 
-use lynx_embedded::Pn532;
+use lynx_embedded::ykhmac::{AuthStatus, YubiKeyResult};
 use lynx_embedded::{ykhmac, Led};
+use lynx_embedded::{LedError, Pn532};
 
 fn main() -> anyhow::Result<()> {
     // Bind the log crate to the ESP Logging facilities
@@ -51,19 +52,40 @@ fn main() -> anyhow::Result<()> {
         esp_idf_svc::sys::rmt_channel_t_RMT_CHANNEL_0,
         esp_idf_svc::sys::gpio_num_t_GPIO_NUM_8,
     )?;
-    let mut authenticated = true;
 
     log::info!("Waiting for NFC target...");
     loop {
-        if authenticated {
-            authenticated = false;
-            led.set_color(0x10, 0x00, 0x00)?;
-        }
-        if ykhmac::authenticate() {
-            authenticated = true;
-            // Set LED to green for 3 seconds, then back to red.
-            led.set_color(0x00, 0x10, 0x00)?;
-            FreeRtos::delay_ms(3000)
+        match ykhmac::wait_for_yubikey() {
+            YubiKeyResult::IsYubiKey => {
+                log::info!("YubiKey detected!");
+                log::info!("Firmware version: {}", ykhmac::get_version().as_string());
+                log::info!("Serial number: {}", ykhmac::get_serial());
+                match ykhmac::authenticate() {
+                    AuthStatus::AccessGranted => {
+                        set_green(&mut led, 3000)? // Set LED to green for 3 seconds.
+                    }
+                    AuthStatus::AccessDenied => {
+                        set_red(&mut led, 3000)? // Set LED to red for 3 seconds.
+                    }
+                    AuthStatus::Error(e) => log::warn!("Auth error: {e:?}"),
+                }
+            }
+            YubiKeyResult::NotYubiKey => set_red(&mut led, 3000)?, // Set LED to red for 3 seconds.
+            YubiKeyResult::Error(_) => {}
         }
     }
+}
+
+fn set_green(led: &mut Led, wait_ms: u32) -> Result<(), LedError> {
+    // Set LED to green for 3 seconds, then off.
+    led.set_color(0x00, 0x10, 0x00)?;
+    FreeRtos::delay_ms(wait_ms);
+    led.set_color(0x00, 0x00, 0x00)
+}
+
+fn set_red(led: &mut Led, wait_ms: u32) -> Result<(), LedError> {
+    // Set LED to green for 3 seconds, then off.
+    led.set_color(0x10, 0x00, 0x00)?;
+    FreeRtos::delay_ms(wait_ms);
+    led.set_color(0x00, 0x00, 0x00)
 }

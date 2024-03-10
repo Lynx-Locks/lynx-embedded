@@ -18,8 +18,8 @@ fn main() {
         // C functions to use in Rust.
         // Unused ones are commented out to prevent clippy errors.
         "ykhmac_select",
-        // "ykhmac_read_serial",
-        // "ykhmac_read_version",
+        "ykhmac_read_serial",
+        "ykhmac_read_version",
         // "ykhmac_exchange_hmac",
         // "ykhmac_find_slots",
         "ykhmac_enroll_key",
