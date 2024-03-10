@@ -13,8 +13,11 @@ pub(crate) struct Config {
 
 pub fn connect(wifi: &mut BlockingWifi<EspWifi<'static>>) -> Result<()> {
     let wifi_configuration: Configuration = Configuration::Client(ClientConfiguration {
-        ssid: CONFIG.wifi_ssid.into(),
-        password: CONFIG.wifi_password.into(),
+        ssid: CONFIG.wifi_ssid.parse().expect("Failed to parse wifi SSID"),
+        password: CONFIG
+            .wifi_password
+            .parse()
+            .expect("Failed to parse wifi password"),
         auth_method: AuthMethod::WPA2Personal,
         ..Default::default()
     });

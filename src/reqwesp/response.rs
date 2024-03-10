@@ -60,13 +60,10 @@ impl<'a> Response<'a> {
 
     /// Get the `StatusCode` of this `Response`.
     pub fn status(&self) -> StatusCode {
-        match StatusCode::from_u16(self.res.status()) {
-            Ok(status) => status,
-            Err(_) => {
-                log::error!("Invalid response status code");
-                StatusCode::BAD_REQUEST
-            }
-        }
+        StatusCode::from_u16(self.res.status()).unwrap_or_else(|_| {
+            log::error!("Invalid response status code");
+            StatusCode::BAD_REQUEST
+        })
     }
 
     /// Get the final URL of this `Response`.
