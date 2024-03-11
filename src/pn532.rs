@@ -109,13 +109,13 @@ impl<'d, S: Borrow<SpiDriver<'d>> + 'd, const N: usize> Pn532<'d, S, N> {
         Ok(())
     }
 
-    pub fn inlist_passive_target(&mut self) -> Result<(), Pn532Error> {
+    pub fn inlist_passive_target(&mut self, timeout: Duration) -> Result<(), Pn532Error> {
         let mut target = 0;
         let response = match self.pn532.process(
             &Request::INLIST_ONE_ISO_A_TARGET,
             N - 9,
             Duration::from_millis(1000),
-            Duration::from_millis(30000),
+            timeout,
         ) {
             Ok(res) => {
                 // ISO14443A card response should be in the following format:

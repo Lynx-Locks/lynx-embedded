@@ -1,5 +1,6 @@
 use anyhow::Result;
 use embedded_hal::spi::MODE_0;
+use std::time::Duration;
 
 use esp_idf_svc::hal::peripherals::Peripherals;
 use esp_idf_svc::hal::prelude::FromValueType;
@@ -50,6 +51,8 @@ fn main() -> Result<()> {
 
     log::info!("Waiting for NFC target...");
     loop {
-        pn532.inlist_passive_target().ok();
+        pn532
+            .inlist_passive_target(Duration::from_millis(30000))
+            .ok();
     }
 }

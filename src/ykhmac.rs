@@ -1,6 +1,7 @@
 use anyhow::anyhow;
 use std::num::{IntErrorKind, NonZeroI32};
 use std::sync::Once;
+use std::time::Duration;
 
 use embedded_storage::{ReadStorage, Storage};
 use esp_storage::FlashStorage;
@@ -303,7 +304,7 @@ pub enum YubiKeyResult {
 }
 
 /// Waits for an NFC target and returns Ok(true) if the target is a YubiKey.
-pub fn wait_for_yubikey() -> YubiKeyResult {
+pub fn wait_for_yubikey(timeout: Duration) -> YubiKeyResult {
     let pn532 = match get_pn532() {
         Ok(device) => device,
         Err(e) => {
@@ -314,7 +315,7 @@ pub fn wait_for_yubikey() -> YubiKeyResult {
         }
     };
 
-    match pn532.inlist_passive_target() {
+    match pn532.inlist_passive_target(timeout) {
         Ok(_) => unsafe {
             if ykhmac_select(YUBIKEY_AID.as_ptr(), 7) {
                 log::info!("Select OK");

@@ -1,4 +1,5 @@
 use embedded_hal::spi::MODE_0;
+use std::time::Duration;
 
 use esp_idf_svc::eventloop::EspSystemEventLoop;
 use esp_idf_svc::hal::delay::FreeRtos;
@@ -55,7 +56,7 @@ fn main() -> anyhow::Result<()> {
 
     log::info!("Waiting for NFC target...");
     loop {
-        match ykhmac::wait_for_yubikey() {
+        match ykhmac::wait_for_yubikey(Duration::from_millis(30000)) {
             YubiKeyResult::IsYubiKey => {
                 log::info!("YubiKey detected!");
                 log::info!("Firmware version: {}", ykhmac::get_version().as_string());
