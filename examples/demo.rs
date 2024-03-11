@@ -1,15 +1,21 @@
 use anyhow::Result;
+use embedded_hal::spi::MODE_0;
+use std::time::Duration;
 
 use esp_idf_svc::hal::delay::FreeRtos;
 use esp_idf_svc::hal::ledc::config::TimerConfig;
 use esp_idf_svc::hal::ledc::{LedcDriver, LedcTimerDriver, Resolution};
 use esp_idf_svc::hal::prelude::{FromValueType, Peripherals};
+use esp_idf_svc::hal::spi::config::BitOrder;
+use esp_idf_svc::hal::spi::{config, SpiDeviceDriver, SpiDriver, SpiDriverConfig, SPI2};
+use esp_idf_svc::hal::timer::TimerDriver;
 use esp_idf_svc::log::EspLogger;
 use esp_idf_svc::wifi::{BlockingWifi, EspWifi};
 use esp_idf_svc::{eventloop::EspSystemEventLoop, nvs::EspDefaultNvsPartition};
 use hyper::StatusCode;
 
-use lynx_embedded::{reqwesp, wifi as espWifi, Led};
+use lynx_embedded::ykhmac::{AuthStatus, YubiKeyResult};
+use lynx_embedded::{reqwesp, wifi as espWifi, ykhmac, Led, LedError, Pn532};
 
 fn main() -> Result<()> {
     // Bind the log crate to the ESP Logging facilities
@@ -19,6 +25,36 @@ fn main() -> Result<()> {
     let peripherals = Peripherals::take().unwrap();
     let sys_loop = EspSystemEventLoop::take()?;
     let nvs = EspDefaultNvsPartition::take()?;
+
+    let spi = peripherals.spi2;
+
+    let sclk = peripherals.pins.gpio7;
+    let miso = peripherals.pins.gpio6; // SDI
+    let mosi = peripherals.pins.gpio5; // SDO
+    let cs = peripherals.pins.gpio4;
+
+    let driver = SpiDriver::new::<SPI2>(spi, sclk, mosi, Some(miso), &SpiDriverConfig::new())?;
+    let config = config::Config::new()
+        .baudrate(100000.Hz())
+        .data_mode(MODE_0)
+        .bit_order(BitOrder::LsbFirst);
+    let device = SpiDeviceDriver::new(driver, Some(cs), &config)?;
+
+    let timer = TimerDriver::new(
+        peripherals.timer10,
+        &esp_idf_svc::hal::timer::TimerConfig::new(),
+    )?;
+
+    if let Err(e) = ykhmac::initialize_pn532(Pn532::new(device, timer)) {
+        log::error!("Failed to initialize PN532: {e:?}");
+        return Ok(());
+    }
+
+    let secret_key_str = "deadbeef";
+    if let Err(e) = ykhmac::enroll_key(secret_key_str) {
+        log::error!("Failed to enroll key! {e:?}");
+        return Ok(());
+    }
 
     let mut wifi = BlockingWifi::wrap(
         EspWifi::new(peripherals.modem, sys_loop.clone(), Some(nvs))?,
@@ -62,29 +98,55 @@ fn main() -> Result<()> {
     // Endpoint for testing REST requests
     let url = "https://app.lynx-locks.com/api/doors/unlocked/1";
 
+    log::info!("Waiting for authorized credentials...");
     loop {
-        FreeRtos::delay_ms(500);
-
         let mut req = client.get(url);
         let res = req.send()?;
 
         if let StatusCode::OK = res.status() {
             log::info!("Door unlocked!");
-            led.set_color(0x00, 0x10, 0x00)?;
-            servo.set_position(DoorPosition::Unlocked);
-            FreeRtos::delay_ms(10000);
-            led.set_color(0x00, 0x00, 0x00)?;
-            servo.set_position(DoorPosition::Locked);
-            servo.set_position(DoorPosition::Neutral);
+            unlock(&mut led, &mut servo).unwrap();
+        }
+
+        match ykhmac::wait_for_yubikey(Duration::from_millis(1000)) {
+            YubiKeyResult::IsYubiKey => {
+                log::info!("YubiKey detected!");
+                log::info!("Firmware version: {}", ykhmac::get_version().as_string());
+                log::info!("Serial number: {}", ykhmac::get_serial());
+                match ykhmac::authenticate() {
+                    AuthStatus::AccessGranted => unlock(&mut led, &mut servo).unwrap(),
+                    AuthStatus::AccessDenied => set_red(&mut led, 3000).unwrap(),
+                    AuthStatus::Error(e) => log::warn!("Auth error: {e:?}"),
+                }
+            }
+            YubiKeyResult::NotYubiKey => set_red(&mut led, 3000)?, // Set LED to red for 3 seconds.
+            YubiKeyResult::Error(_) => {}
         }
     }
+}
+
+fn unlock(led: &mut Led, servo: &mut ServoHandler) -> std::result::Result<(), LedError> {
+    led.set_color(0x00, 0x10, 0x00)?;
+    servo.set_position(DoorPosition::Unlocked);
+    FreeRtos::delay_ms(5000);
+    led.set_color(0x00, 0x00, 0x00)?;
+    servo.set_position(DoorPosition::Locked);
+    servo.set_position(DoorPosition::Neutral);
+    Ok(())
+}
+
+fn set_red(led: &mut Led, wait_ms: u32) -> std::result::Result<(), LedError> {
+    // Set LED to green for 3 seconds, then off.
+    led.set_color(0x10, 0x00, 0x00)?;
+    FreeRtos::delay_ms(wait_ms);
+    led.set_color(0x00, 0x00, 0x00)
 }
 
 #[derive(Clone, Copy, Debug)]
 enum DoorPosition {
     Neutral = 90,
     Unlocked = 37,
-    Locked = 35,
+    Locked = 135,
 }
 
 struct ServoHandler<'a> {
