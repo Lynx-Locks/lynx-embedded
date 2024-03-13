@@ -111,10 +111,24 @@ fn main() -> Result<()> {
         match ykhmac::wait_for_yubikey(Duration::from_millis(1000)) {
             YubiKeyResult::IsYubiKey => {
                 log::info!("YubiKey detected!");
-                log::info!("Firmware version: {}", ykhmac::get_version().as_string());
-                log::info!("Serial number: {}", ykhmac::get_serial());
+                log::info!("Firmware version: {}", ykhmac::get_version());
+                let serial = ykhmac::get_serial();
+                log::info!("Serial number: {serial}");
                 match ykhmac::authenticate() {
-                    AuthStatus::AccessGranted => unlock(&mut led, &mut servo).unwrap(),
+                    AuthStatus::AccessGranted => {
+                        let url =
+                            format!("https://app.lynx-locks.com/api/auth/authorize/1/{serial}");
+                        let mut req = client.get(url.as_str());
+                        let res = req.send()?;
+
+                        if let StatusCode::OK = res.status() {
+                            log::info!("Door unlocked!");
+                            unlock(&mut led, &mut servo).unwrap();
+                        } else {
+                            log::info!("Access Denied");
+                            set_red(&mut led, 3000).unwrap()
+                        }
+                    }
                     AuthStatus::AccessDenied => set_red(&mut led, 3000).unwrap(),
                     AuthStatus::Error(e) => log::warn!("Auth error: {e:?}"),
                 }
