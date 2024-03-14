@@ -17,12 +17,17 @@ use hyper::StatusCode;
 use lynx_embedded::ykhmac::{AuthStatus, YubiKeyResult};
 use lynx_embedded::{reqwesp, wifi as espWifi, ykhmac, Led, LedError, Pn532};
 
-fn main() -> Result<()> {
+fn main() {
+    demo().expect("Error in demo");
+    panic!("Error in demo");
+}
+
+fn demo() -> Result<()> {
     // Bind the log crate to the ESP Logging facilities
     EspLogger::initialize_default();
 
     // Configure Wifi
-    let peripherals = Peripherals::take().unwrap();
+    let peripherals = Peripherals::take()?;
     let sys_loop = EspSystemEventLoop::take()?;
     let nvs = EspDefaultNvsPartition::take()?;
 
@@ -77,16 +82,14 @@ fn main() -> Result<()> {
         &TimerConfig::default()
             .frequency(50.Hz())
             .resolution(Resolution::Bits14),
-    )
-    .unwrap();
+    )?;
 
     // Configure and Initialize LEDC Driver
     let servo_driver = LedcDriver::new(
         peripherals.ledc.channel0,
         timer_driver,
         peripherals.pins.gpio10,
-    )
-    .unwrap();
+    )?;
 
     let start_position = DoorPosition::Neutral;
     let servo_delay = 12;
@@ -105,7 +108,7 @@ fn main() -> Result<()> {
 
         if let StatusCode::OK = res.status() {
             log::info!("Door unlocked!");
-            unlock(&mut led, &mut servo).unwrap();
+            unlock(&mut led, &mut servo)?;
         }
 
         match ykhmac::wait_for_yubikey(Duration::from_millis(1000)) {
@@ -123,13 +126,13 @@ fn main() -> Result<()> {
 
                         if let StatusCode::OK = res.status() {
                             log::info!("Door unlocked!");
-                            unlock(&mut led, &mut servo).unwrap();
+                            unlock(&mut led, &mut servo)?;
                         } else {
                             log::info!("Access Denied");
-                            set_red(&mut led, 3000).unwrap()
+                            set_red(&mut led, 3000)?
                         }
                     }
-                    AuthStatus::AccessDenied => set_red(&mut led, 3000).unwrap(),
+                    AuthStatus::AccessDenied => set_red(&mut led, 3000)?,
                     AuthStatus::Error(e) => log::warn!("Auth error: {e:?}"),
                 }
             }
