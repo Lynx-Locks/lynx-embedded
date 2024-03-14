@@ -21,7 +21,7 @@ use bindings::*;
 const PN532_BUF_SIZE: usize = 128;
 
 /// Start of NVS partition.
-const FLASH_ADDR: u32 = 0x9000;
+const FLASH_ADDR: u32 = 0xef80;
 
 const YUBIKEY_AID: [u8; 7] = [0xA0, 0x00, 0x00, 0x05, 0x27, 0x20, 0x01];
 
