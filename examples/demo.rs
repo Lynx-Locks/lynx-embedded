@@ -1,8 +1,10 @@
 use anyhow::Result;
-use embedded_hal::spi::MODE_0;
+use hyper::StatusCode;
 use std::time::Duration;
 
+use embedded_hal::spi::MODE_0;
 use esp_idf_svc::hal::delay::FreeRtos;
+use esp_idf_svc::hal::gpio::{Gpio2, Gpio3};
 use esp_idf_svc::hal::ledc::config::TimerConfig;
 use esp_idf_svc::hal::ledc::{LedcDriver, LedcTimerDriver, Resolution};
 use esp_idf_svc::hal::prelude::{FromValueType, Peripherals};
@@ -12,20 +14,18 @@ use esp_idf_svc::hal::timer::TimerDriver;
 use esp_idf_svc::log::EspLogger;
 use esp_idf_svc::wifi::{BlockingWifi, EspWifi};
 use esp_idf_svc::{eventloop::EspSystemEventLoop, nvs::EspDefaultNvsPartition};
-use hyper::StatusCode;
 
 use lynx_embedded::ykhmac::{AuthStatus, YubiKeyResult};
-use lynx_embedded::{reqwesp, wifi as espWifi, ykhmac, Led, LedError, Pn532};
+use lynx_embedded::{reqwesp, wifi as espWifi, ykhmac, ExternalLed, Led, LedError, Pn532};
 
 fn main() {
+    // Bind the log crate to the ESP Logging facilities
+    EspLogger::initialize_default();
     demo().expect("Error in demo");
     panic!("Error in demo");
 }
 
 fn demo() -> Result<()> {
-    // Bind the log crate to the ESP Logging facilities
-    EspLogger::initialize_default();
-
     // Configure Wifi
     let peripherals = Peripherals::take()?;
     let sys_loop = EspSystemEventLoop::take()?;
@@ -97,6 +97,9 @@ fn demo() -> Result<()> {
     let mut servo = ServoHandler::new(servo_driver, start_position, servo_delay);
     FreeRtos::delay_ms(100);
 
+    let mut green_led = ExternalLed::new(peripherals.pins.gpio3);
+    let mut red_led = ExternalLed::new(peripherals.pins.gpio2);
+
     let mut client = reqwesp::Client::new()?;
     // Endpoint for testing REST requests
     let url = "https://app.lynx-locks.com/api/doors/unlocked/1";
@@ -108,7 +111,7 @@ fn demo() -> Result<()> {
 
         if let StatusCode::OK = res.status() {
             log::info!("Door unlocked!");
-            unlock(&mut led, &mut servo)?;
+            unlock(&mut led, &mut green_led, &mut servo)?;
         }
 
         match ykhmac::wait_for_yubikey(Duration::from_millis(1000)) {
@@ -126,36 +129,49 @@ fn demo() -> Result<()> {
 
                         if let StatusCode::OK = res.status() {
                             log::info!("Door unlocked!");
-                            unlock(&mut led, &mut servo)?;
+                            unlock(&mut led, &mut green_led, &mut servo)?;
                         } else {
                             log::info!("Access Denied");
-                            set_red(&mut led, 3000)?
+                            set_red(&mut led, &mut red_led, 3000)?
                         }
                     }
-                    AuthStatus::AccessDenied => set_red(&mut led, 3000)?,
+                    AuthStatus::AccessDenied => set_red(&mut led, &mut red_led, 3000)?,
                     AuthStatus::Error(e) => log::warn!("Auth error: {e:?}"),
                 }
             }
-            YubiKeyResult::NotYubiKey => set_red(&mut led, 3000)?, // Set LED to red for 3 seconds.
+            YubiKeyResult::NotYubiKey => set_red(&mut led, &mut red_led, 3000)?, // Set LED to red for 3 seconds.
             YubiKeyResult::Error(_) => {}
         }
     }
 }
 
-fn unlock(led: &mut Led, servo: &mut ServoHandler) -> std::result::Result<(), LedError> {
+fn unlock(
+    led: &mut Led,
+    external_led: &mut ExternalLed<Gpio3>,
+    servo: &mut ServoHandler,
+) -> std::result::Result<(), LedError> {
     led.set_color(0x00, 0x10, 0x00)?;
+    external_led.set(true);
     servo.set_position(DoorPosition::Unlocked);
-    FreeRtos::delay_ms(5000);
+
+    FreeRtos::delay_ms(7000);
+    external_led.set(false);
     led.set_color(0x00, 0x00, 0x00)?;
     servo.set_position(DoorPosition::Locked);
     servo.set_position(DoorPosition::Neutral);
     Ok(())
 }
 
-fn set_red(led: &mut Led, wait_ms: u32) -> std::result::Result<(), LedError> {
-    // Set LED to green for 3 seconds, then off.
+fn set_red(
+    led: &mut Led,
+    external_led: &mut ExternalLed<Gpio2>,
+    wait_ms: u32,
+) -> std::result::Result<(), LedError> {
+    external_led.set(true);
     led.set_color(0x10, 0x00, 0x00)?;
+
     FreeRtos::delay_ms(wait_ms);
+    external_led.set(false);
     led.set_color(0x00, 0x00, 0x00)
 }
 
