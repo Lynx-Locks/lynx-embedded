@@ -1,0 +1,43 @@
+[package]
+name = "ws2812-esp32-rmt-driver"
+version = "0.7.1"
+license = "MIT"
+authors = ["@cat_in_136"]
+categories = ["embedded", "hardware-support"]
+keywords = ["embedded-graphics", "esp32", "neopixel", "smart-leds", "ws2812"]
+description = "WS2812 driver using ESP32 RMT"
+homepage = "https://github.com/cat-in-136/ws2812-esp32-rmt-smart-leds"
+readme = "README.md"
+repository = "https://github.com/cat-in-136/ws2812-esp32-rmt-smart-leds"
+edition = "2021"
+
+[features]
+
+[dependencies]
+smart-leds-trait = { version = "0.3", optional = true }
+embedded-graphics-core = { version = "0.4", optional = true }
+thiserror = "1"
+
+[target.'cfg(target_vendor = "espressif")'.dependencies]
+esp-idf-sys = { version = ">=0.33", features = ["binstart"] }
+esp-idf-hal = "0.42"
+
+[dev-dependencies]
+smart-leds = "0.3"
+embedded-graphics = "0.8"
+
+[build-dependencies]
+embuild = "0.31"
+
+[profile.release]
+strip = true
+opt-level = "s"
+
+[profile.dev]
+debug = true # Symbols are nice and they don't increase the size on Flash
+strip = true
+opt-level = "z"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
