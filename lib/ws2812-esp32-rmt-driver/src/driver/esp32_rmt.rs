@@ -1,9 +1,9 @@
 use esp_idf_hal::gpio::OutputPin;
 use esp_idf_hal::peripheral::Peripheral;
 use esp_idf_hal::rmt::config::TransmitConfig;
-use esp_idf_hal::rmt::{FixedLengthSignal, PinState, Pulse, RmtChannel, Signal, TxRmtDriver};
+use esp_idf_hal::rmt::{PinState, Pulse, RmtChannel, Symbol, TxRmtDriver};
 use esp_idf_hal::units::Hertz;
-use esp_idf_sys::{rmt_item32_t, EspError};
+use esp_idf_sys::EspError;
 use std::time::Duration;
 
 /// T0H duration time (0 code, high voltage time)
@@ -19,9 +19,9 @@ const WS2812_T1L_NS: Duration = Duration::from_nanos(450);
 #[repr(C)]
 struct Ws2812Esp32RmtItemEncoder {
     /// The RMT item that represents a 0 code.
-    bit0: rmt_item32_t,
+    bit0: (Pulse, Pulse),
     /// The RMT item that represents a 1 code.
-    bit1: rmt_item32_t,
+    bit1: (Pulse, Pulse),
 }
 
 impl Ws2812Esp32RmtItemEncoder {
@@ -42,16 +42,10 @@ impl Ws2812Esp32RmtItemEncoder {
             Pulse::new_with_duration(clock_hz, PinState::Low, &WS2812_T1L_NS)?,
         );
 
-        let (bit0, bit1) = {
-            let mut bit0_sig = FixedLengthSignal::<1>::new();
-            let mut bit1_sig = FixedLengthSignal::<1>::new();
-            bit0_sig.set(0, &(t0h, t0l))?;
-            bit1_sig.set(0, &(t1h, t1l))?;
-
-            (bit0_sig.as_slice()[0], bit1_sig.as_slice()[0])
-        };
-
-        Ok(Self { bit0, bit1 })
+        Ok(Self {
+            bit0: (t0h, t0l),
+            bit1: (t1h, t1l),
+        })
     }
 
     /// Encodes a block of data as a sequence of RMT items.
@@ -64,17 +58,21 @@ impl Ws2812Esp32RmtItemEncoder {
     ///
     /// An iterator over the RMT items that represent the encoded data.
     #[inline]
-    fn encode_iter<'a, 'b, T>(&'a self, src: T) -> impl Iterator<Item = rmt_item32_t> + Send + 'a
+    fn encode_iter<'a, 'b, T>(&'a self, src: T) -> impl Iterator<Item = Symbol> + Send + 'a
     where
         'b: 'a,
         T: Iterator<Item = u8> + Send + 'b,
     {
+        let bit0 = self.bit0;
+        let bit1 = self.bit1;
         src.flat_map(move |v| {
             (0..(u8::BITS as usize)).map(move |i| {
                 if v & (1 << (7 - i)) != 0 {
-                    self.bit1
+                    let (pulse_0, pulse_1) = bit1;
+                    Symbol::new(pulse_0, pulse_1)
                 } else {
-                    self.bit0
+                    let (pulse_0, pulse_1) = bit0;
+                    Symbol::new(pulse_0, pulse_1)
                 }
             })
         })
