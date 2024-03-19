@@ -1,10 +1,12 @@
-use anyhow::Result;
-use hyper::StatusCode;
 use std::time::Duration;
 
+use anyhow::Result;
 use embedded_hal::spi::MODE_0;
+use hyper::StatusCode;
+use smart_leds::{SmartLedsWrite, RGB};
+use ws2812_esp32_rmt_driver::Ws2812Esp32Rmt;
+
 use esp_idf_svc::hal::delay::FreeRtos;
-use esp_idf_svc::hal::gpio::{Gpio2, Gpio3};
 use esp_idf_svc::hal::ledc::config::TimerConfig;
 use esp_idf_svc::hal::ledc::{LedcDriver, LedcTimerDriver, Resolution};
 use esp_idf_svc::hal::prelude::{FromValueType, Peripherals};
@@ -16,16 +18,19 @@ use esp_idf_svc::wifi::{BlockingWifi, EspWifi};
 use esp_idf_svc::{eventloop::EspSystemEventLoop, nvs::EspDefaultNvsPartition};
 
 use lynx_embedded::ykhmac::{AuthStatus, YubiKeyResult};
-use lynx_embedded::{reqwesp, wifi as espWifi, ykhmac, ExternalLed, Led, LedError, Pn532};
+use lynx_embedded::{reqwesp, wifi as espWifi, ykhmac, Pn532};
 
-fn main() {
-    // Bind the log crate to the ESP Logging facilities
-    EspLogger::initialize_default();
+type Led<'d> = Ws2812Esp32Rmt<'d>;
+
+fn main() -> ! {
     demo().expect("Error in demo");
     panic!("Error in demo");
 }
 
 fn demo() -> Result<()> {
+    // Bind the log crate to the ESP Logging facilities
+    EspLogger::initialize_default();
+
     // Configure Wifi
     let peripherals = Peripherals::take()?;
     let sys_loop = EspSystemEventLoop::take()?;
@@ -69,12 +74,8 @@ fn demo() -> Result<()> {
     espWifi::connect(&mut wifi)?;
     log::info!("Wifi connected!");
 
-    let mut led = Led::new(
-        esp_idf_svc::sys::rmt_channel_t_RMT_CHANNEL_0,
-        esp_idf_svc::sys::gpio_num_t_GPIO_NUM_8,
-    )?;
-
-    led.set_color(0x00, 0x00, 0x00)?;
+    let mut led = Led::new(peripherals.rmt.channel0, peripherals.pins.gpio3)?;
+    led.write(std::iter::repeat(RGB::new(0x00, 0x00, 0x10)).take(25))?;
 
     // Configure and Initialize LEDC Timer Driver
     let timer_driver = LedcTimerDriver::new(
@@ -97,9 +98,6 @@ fn demo() -> Result<()> {
     let mut servo = ServoHandler::new(servo_driver, start_position, servo_delay);
     FreeRtos::delay_ms(100);
 
-    let mut green_led = ExternalLed::new(peripherals.pins.gpio3);
-    let mut red_led = ExternalLed::new(peripherals.pins.gpio2);
-
     let mut client = reqwesp::Client::new()?;
     // Endpoint for testing REST requests
     let url = "https://app.lynx-locks.com/api/doors/unlocked/1";
@@ -111,7 +109,7 @@ fn demo() -> Result<()> {
 
         if let StatusCode::OK = res.status() {
             log::info!("Door unlocked!");
-            unlock(&mut led, &mut green_led, &mut servo)?;
+            unlock(&mut led, &mut servo)?;
         }
 
         match ykhmac::wait_for_yubikey(Duration::from_millis(1000)) {
@@ -129,50 +127,39 @@ fn demo() -> Result<()> {
 
                         if let StatusCode::OK = res.status() {
                             log::info!("Door unlocked!");
-                            unlock(&mut led, &mut green_led, &mut servo)?;
+                            unlock(&mut led, &mut servo)?;
                         } else {
                             log::info!("Access Denied");
-                            set_red(&mut led, &mut red_led, 3000)?
+                            set_red(&mut led, 3000)?
                         }
                     }
-                    AuthStatus::AccessDenied => set_red(&mut led, &mut red_led, 3000)?,
+                    AuthStatus::AccessDenied => set_red(&mut led, 3000)?,
                     AuthStatus::Error(e) => log::warn!("Auth error: {e:?}"),
                 }
             }
-            YubiKeyResult::NotYubiKey => set_red(&mut led, &mut red_led, 3000)?, // Set LED to red for 3 seconds.
+            YubiKeyResult::NotYubiKey => set_red(&mut led, 3000)?, // Set LED to red for 3 seconds.
             YubiKeyResult::Error(_) => {}
         }
     }
 }
 
-fn unlock(
-    led: &mut Led,
-    external_led: &mut ExternalLed<Gpio3>,
-    servo: &mut ServoHandler,
-) -> std::result::Result<(), LedError> {
-    led.set_color(0x00, 0x10, 0x00)?;
-    external_led.set(true);
+fn unlock(led: &mut Led, servo: &mut ServoHandler) -> Result<()> {
+    led.write(std::iter::repeat(RGB::new(0x00, 0x10, 0x00)).take(25))?;
     servo.set_position(DoorPosition::Unlocked);
 
     FreeRtos::delay_ms(7000);
-    external_led.set(false);
-    led.set_color(0x00, 0x00, 0x00)?;
+    led.write(std::iter::repeat(RGB::new(0x00, 0x00, 0x10)).take(25))?;
     servo.set_position(DoorPosition::Locked);
     servo.set_position(DoorPosition::Neutral);
     Ok(())
 }
 
-fn set_red(
-    led: &mut Led,
-    external_led: &mut ExternalLed<Gpio2>,
-    wait_ms: u32,
-) -> std::result::Result<(), LedError> {
-    external_led.set(true);
-    led.set_color(0x10, 0x00, 0x00)?;
+fn set_red(led: &mut Led, wait_ms: u32) -> Result<()> {
+    led.write(std::iter::repeat(RGB::new(0x10, 0x00, 0x00)).take(25))?;
 
     FreeRtos::delay_ms(wait_ms);
-    external_led.set(false);
-    led.set_color(0x00, 0x00, 0x00)
+    led.write(std::iter::repeat(RGB::new(0x00, 0x00, 0x10)).take(25))?;
+    Ok(())
 }
 
 #[derive(Clone, Copy, Debug)]
