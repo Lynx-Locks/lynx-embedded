@@ -100,7 +100,7 @@ fn demo() -> Result<()> {
 
     let mut client = reqwesp::Client::new()?;
     // Endpoint for testing REST requests
-    let url = "https://app.lynx-locks.com/api/doors/unlocked/1";
+    let url = "https://app.lynx-locks.com/api/auth/unlocked/1";
 
     log::info!("Waiting for authorized credentials...");
     loop {
