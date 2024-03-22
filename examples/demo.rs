@@ -22,6 +22,8 @@ use lynx_embedded::{reqwesp, wifi as espWifi, ykhmac, Pn532};
 
 type Led<'d> = Ws2812Esp32Rmt<'d>;
 
+const DOOR_ID: u32 = 1;
+
 fn main() -> ! {
     demo().expect("Error in demo");
     panic!("Error in demo");
@@ -100,11 +102,11 @@ fn demo() -> Result<()> {
 
     let mut client = reqwesp::Client::new()?;
     // Endpoint for testing REST requests
-    let url = "https://app.lynx-locks.com/api/auth/unlocked/1";
+    let url = format!("https://app.lynx-locks.com/api/auth/unlocked/{DOOR_ID}");
 
     log::info!("Waiting for authorized credentials...");
     loop {
-        let mut req = client.get(url);
+        let mut req = client.get(url.as_str());
         let res = req.send()?;
 
         if let StatusCode::OK = res.status() {
@@ -120,8 +122,9 @@ fn demo() -> Result<()> {
                 log::info!("Serial number: {serial}");
                 match ykhmac::authenticate() {
                     AuthStatus::AccessGranted => {
-                        let url =
-                            format!("https://app.lynx-locks.com/api/auth/authorize/1/{serial}");
+                        let url = format!(
+                            "https://app.lynx-locks.com/api/auth/authorize/{DOOR_ID}/{serial}"
+                        );
                         let mut req = client.get(url.as_str());
                         let res = req.send()?;
 
